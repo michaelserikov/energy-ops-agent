@@ -1,0 +1,65 @@
+import numpy as np
+import pandas as pd
+import pytest
+
+from eoa import tools as T
+from eoa.agent import Agent, check_grounded, daily_report
+from eoa.api import app
+
+
+@pytest.fixture(scope="module")
+def df():
+    return T.load()
+
+
+def test_known_event_dunkelflaute(df):
+    s = T.daily_summary("2024-12-12", df)
+    assert s["wind_mean_mw"] < 3000 and s["price_max"] > 900
+    assert T.price_anomalies("2024-12-12", df)["n_anomalies"] >= 8
+
+
+def test_injected_faults_found(df):
+    d = df.copy()
+    day = "2024-06-05"
+    idx = d.loc[day].index
+    d = d.drop(idx[[3, 4]])                         # two missing hours
+    d.loc[idx[1], "solar"] = 9000.0                 # solar at night
+    d.loc[idx[10], "load"] = np.nan                 # missing value
+    f = T.data_quality(day, d)["flags"]
+    assert any(x.startswith("missing_hours") for x in f)
+    assert "solar_at_night" in f
+    assert any(x.startswith("missing_values") for x in f)
+
+
+def test_clean_day_has_no_flags(df):
+    assert T.data_quality("2024-06-01", df)["flags"] == []
+
+
+def test_grounding_blocks_invented_number(df):
+    t = Agent(df=df).ask("How was 2024-06-01? summary")
+    assert t.grounded
+    assert check_grounded(t.answer, t.calls) == []
+    assert check_grounded("The mean price was 42.17 EUR/MWh.", t.calls) == ["42.17"]
+
+
+def test_unknown_tool_and_bad_args(df):
+    a = Agent(df=df)
+    assert "error" in a.execute("delete_everything", {})
+    assert "error" in a.execute("daily_summary", {"day": "yesterday"})
+    assert "error" in a.execute("daily_summary", {"day": "2024-06-01", "x": "1"})
+
+
+def test_no_date_no_guess(df):
+    t = Agent(df=df).ask("what is the price?")
+    assert t.calls == [] and "date" in t.answer
+
+
+def test_report_and_api():
+    from fastapi.testclient import TestClient
+    c = TestClient(app)
+    r = c.get("/report", params={"day": "2024-12-12"}).json()
+    assert r["alert"] is True and r["grounded"]
+    assert c.get("/report", params={"day": "2024-06-01"}).json()["alert"] is False
+    assert c.get("/report", params={"day": "bad"}).status_code == 422
+    assert c.get("/report", params={"day": "2030-01-01"}).status_code == 404
+    assert c.post("/ask", json={"question": "check data quality 2024-06-01"}).json()["grounded"]

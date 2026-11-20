@@ -1,0 +1,68 @@
+{
+ "days": 702,
+ "days_with_quality_flag": 0,
+ "days_with_anomaly": 223,
+ "days_with_8plus_anomalies": 29,
+ "top_days": [
+  {
+   "day": "2024-11-24",
+   "quality_flags": 0,
+   "n_anomalies": 23,
+   "price_mean": 3.97
+  },
+  {
+   "day": "2025-10-04",
+   "quality_flags": 0,
+   "n_anomalies": 16,
+   "price_mean": -0.29
+  },
+  {
+   "day": "2025-11-25",
+   "quality_flags": 0,
+   "n_anomalies": 15,
+   "price_mean": 220.52
+  },
+  {
+   "day": "2025-03-22",
+   "quality_flags": 0,
+   "n_anomalies": 15,
+   "price_mean": 14.96
+  },
+  {
+   "day": "2025-10-05",
+   "quality_flags": 0,
+   "n_anomalies": 14,
+   "price_mean": 1.73
+  },
+  {
+   "day": "2024-12-12",
+   "quality_flags": 0,
+   "n_anomalies": 14,
+   "price_mean": 395.34
+  },
+  {
+   "day": "2025-03-30",
+   "quality_flags": 0,
+   "n_anomalies": 13,
+   "price_mean": 13.93
+  },
+  {
+   "day": "2024-12-11",
+   "quality_flags": 0,
+   "n_anomalies": 13,
+   "price_mean": 266.54
+  },
+  {
+   "day": "2024-03-24",
+   "quality_flags": 0,
+   "n_anomalies": 12,
+   "price_mean": 25.87
+  },
+  {
+   "day": "2025-09-15",
+   "quality_flags": 0,
+   "n_anomalies": 12,
+   "price_mean": 8.83
+  }
+ ]
+}
