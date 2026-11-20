@@ -12,20 +12,21 @@ A small agent that answers questions about German hourly power data (day-ahead p
 | Agent loop | `src/eoa/agent.py` | `RulePlanner` (deterministic, no key) and `LLMPlanner` (any chat model with function calling, passed in as a callable; `providers.py` has an adapter for the Gemini REST API). Arguments are validated (dates only), unknown tools are refused, tool errors do not stop the loop |
 | Grounding check | `agent.check_grounded` | numbers in the answer must match a tool result or its rounding; otherwise the answer is replaced by a refusal that lists the numbers |
 | HTTP | `src/eoa/api.py` | `GET /report?day=`, `POST /ask`, `GET /health` (FastAPI) |
-| Workflow | `n8n/daily_energy_report.json` | 07:00 schedule, yesterday's date, call `/report` with three retries, branch on `alert`, mail operations or log |
+| Workflow | `n8n/daily_energy_report.json` | schedule trigger (07:00) and a webhook trigger with `?day=`, pick the day, call `/report` with three retries, branch on `alert`, then `POST /outbox` (a local stand-in for mail) or log |
 
 ## Results
 
 - **Known event recovered.** 12 December 2024 (dark doldrums): mean price 395 EUR/MWh, maximum 936, wind 1.5 GW on average; 14 hours flagged as unusual.
 - **Injected faults found.** Tests drop hours, set a missing value and put solar output at night on a real day; all three are flagged. A clean day has no flags.
 - **A naive alarm is too noisy.** At least one unusual hour occurs on 32% of days (223 of 702 days, 2024-2025), so mailing on any flag would mail every third day. The workflow alerts on a data fault or at least 8 unusual hours in a day: 29 of 702 days (4%). No data faults occur in this data set (the SMARD series is clean), so the quality checks are tested only on injected faults. See `results/flag_backtest.json`, `scripts/backtest_flags.py`.
+- **A second bug found by running the workflow.** The text of a quiet day's report said 'previous 28 days', a number no tool returned, so the grounding check withheld the whole report; the tests had only covered days with anomalies. The window length is now part of the tool result, and a test runs the report for every day of a month (and a scan of all 1,065 days found none withheld).
 - **A bug the tests caught.** The first version decided "no data for this day" by searching the report text for the words "no data", which the sentence "no data problems found" also contains; every day returned 404. The check now uses the tool result.
 - **Price slope.** January to March 2025: 3.1 EUR/MWh per GW of residual load (correlation 0.88 over 2,136 hours), a descriptive number.
 
 ## Not done
 
 - `LLMPlanner` is written against a generic function-calling interface but has not been run with a real model: no model endpoint was available. Only the deterministic planner is tested.
-- `n8n/daily_energy_report.json` is valid JSON in the n8n node format but has not been imported or executed: n8n is not installed on the development machine. Mail addresses are placeholders.
+- n8n 2.35.7 (installed with npm in WSL) imported the workflow and ran it through the webhook trigger on two days: 2024-06-01 ended in the branch without alert, 2024-12-12 stored a message to operations (`results/n8n_run.md`). The schedule trigger was configured but not observed to fire. The outbox is a local file, not a mail server.
 - Data is a stored SMARD export, not a live feed; tools never write or send anything, and no personal or customer data is involved.
 - Research and demonstration project, not an operational monitoring system.
 

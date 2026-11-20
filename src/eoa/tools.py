@@ -88,7 +88,7 @@ def price_anomalies(day: str, df: pd.DataFrame | None = None, window_days: int =
         if abs(z) > k:
             out.append({"hour": int(ts.hour), "price": round(float(row["price"]), 2),
                         "typical": round(med, 2), "z": round(float(z), 1)})
-    return {"day": day, "n_anomalies": len(out), "anomalies": out}
+    return {"day": day, "window_days": window_days, "n_anomalies": len(out), "anomalies": out}
 
 
 def compare_days(day_a: str, day_b: str, df: pd.DataFrame | None = None) -> dict:

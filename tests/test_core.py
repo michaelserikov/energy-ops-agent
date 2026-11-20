@@ -113,3 +113,13 @@ def test_gemini_translation_roundtrip():
     assert b["contents"][2]["parts"][0]["functionResponse"]["name"] == "daily_summary"
     r = from_gemini({"candidates": [{"content": {"parts": [{"functionCall": {"name": "x", "args": {"a": "1"}}}]}}]})
     assert r["tool_calls"][0]["name"] == "x" and r["text"] == ""
+
+
+def test_report_of_a_quiet_day_is_not_withheld(df):
+    r = daily_report("2024-06-01", df)
+    assert r["grounded"] and "Withheld" not in r["text"]
+
+
+def test_every_day_of_a_month_is_grounded(df):
+    for d in pd.date_range("2024-03-01", "2024-03-31"):
+        assert daily_report(d.strftime("%Y-%m-%d"), df)["grounded"], d

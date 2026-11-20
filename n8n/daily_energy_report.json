@@ -1,25 +1,33 @@
 {
+  "id": "energyDailyReport1",
   "name": "Daily energy data report",
   "nodes": [
     {"parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 7 * * *"}]}},
-     "name": "Every morning 07:00", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 0]},
-    {"parameters": {"jsCode": "const d = new Date(Date.now() - 24*3600*1000);\nreturn [{json: {day: d.toISOString().slice(0,10)}}];"},
-     "name": "Yesterday", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [220, 0]},
-    {"parameters": {"url": "=http://localhost:8000/report?day={{$json.day}}", "options": {"timeout": 30000}},
-     "name": "Agent report", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [440, 0],
+     "name": "Every morning 07:00", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, -120]},
+    {"parameters": {"httpMethod": "GET", "path": "energy-report", "responseMode": "lastNode", "options": {}},
+     "name": "Webhook (day=YYYY-MM-DD)", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 120],
+     "webhookId": "energy-report-hook"},
+    {"parameters": {"jsCode": "const q = ($json.query && $json.query.day) ? $json.query.day : null;\nconst d = new Date(Date.now() - 24*3600*1000);\nreturn [{json: {day: q || d.toISOString().slice(0,10)}}];"},
+     "name": "Pick day", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [240, 0]},
+    {"parameters": {"url": "=http://localhost:8000/report?day={{$json.day}}", "options": {"timeout": 60000}},
+     "name": "Agent report", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [480, 0],
      "retryOnFail": true, "maxTries": 3, "waitBetweenTries": 5000},
-    {"parameters": {"conditions": {"boolean": [{"value1": "={{$json.alert}}", "value2": true}]}},
-     "name": "Alert?", "type": "n8n-nodes-base.if", "typeVersion": 1, "position": [660, 0]},
-    {"parameters": {"subject": "=Energy data flags {{$json.day}}", "text": "={{$json.text}}", "toEmail": "ops@example.invalid", "fromEmail": "agent@example.invalid"},
-     "name": "Mail to operations", "type": "n8n-nodes-base.emailSend", "typeVersion": 2.1, "position": [880, -80]},
-    {"parameters": {"jsCode": "return [{json: {day: $json.day, status: 'no flags', text: $json.text}}];"},
-     "name": "Log only", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [880, 100]}
+    {"parameters": {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+        "conditions": [{"id": "alert", "leftValue": "={{$json.alert}}", "rightValue": true, "operator": {"type": "boolean", "operation": "true", "singleValue": true}}],
+        "combinator": "and"}, "options": {}},
+     "name": "Alert?", "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": [720, 0]},
+    {"parameters": {"method": "POST", "url": "http://localhost:8000/outbox", "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({subject: 'Energy data alert ' + $json.day, text: $json.text}) }}", "options": {}},
+     "name": "Message to operations", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [960, -100]},
+    {"parameters": {"jsCode": "return [{json: {day: $json.day, status: 'no alert', n_flags: $json.n_flags}}];"},
+     "name": "Log only", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [960, 100]}
   ],
   "connections": {
-    "Every morning 07:00": {"main": [[{"node": "Yesterday", "type": "main", "index": 0}]]},
-    "Yesterday": {"main": [[{"node": "Agent report", "type": "main", "index": 0}]]},
+    "Every morning 07:00": {"main": [[{"node": "Pick day", "type": "main", "index": 0}]]},
+    "Webhook (day=YYYY-MM-DD)": {"main": [[{"node": "Pick day", "type": "main", "index": 0}]]},
+    "Pick day": {"main": [[{"node": "Agent report", "type": "main", "index": 0}]]},
     "Agent report": {"main": [[{"node": "Alert?", "type": "main", "index": 0}]]},
-    "Alert?": {"main": [[{"node": "Mail to operations", "type": "main", "index": 0}], [{"node": "Log only", "type": "main", "index": 0}]]}
+    "Alert?": {"main": [[{"node": "Message to operations", "type": "main", "index": 0}], [{"node": "Log only", "type": "main", "index": 0}]]}
   },
   "settings": {"executionOrder": "v1"}
 }
