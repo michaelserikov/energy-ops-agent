@@ -50,8 +50,28 @@ def test_unknown_tool_and_bad_args(df):
 
 
 def test_no_date_no_guess(df):
-    t = Agent(df=df).ask("what is the price?")
+    t = Agent(df=df).ask("price please")
     assert t.calls == [] and "date" in t.answer
+
+
+def test_kb_retrieval_finds_right_document(df):
+    a = Agent(df=df)
+    assert a.ask("When does operations get an alert?").calls[0][2]["hits"][0]["source"] == "04_alert_rules"
+    assert a.ask("What is residual load?").calls[0][2]["hits"][0]["source"] == "01_residual_load"
+
+
+def test_kb_out_of_scope_is_refused(df):
+    t = Agent(df=df).ask("what is the capital of France")
+    assert t.calls[0][2]["found"] is False and "no passage" in t.answer
+
+
+def test_notice_needs_approval_and_is_grounded(df):
+    t = Agent(df=df).ask("Draft a customer notice for 2024-12-12")
+    assert t.calls[0][2]["needs_approval"] is True and t.grounded and t.answer.startswith("DRAFT")
+
+
+def test_long_query_rejected(df):
+    assert "error" in Agent(df=df).execute("search_kb", {"query": "x" * 500})
 
 
 def test_report_and_api():

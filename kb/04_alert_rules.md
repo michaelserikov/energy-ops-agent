@@ -1,0 +1,2 @@
+# When operations is alerted
+The daily report mails operations when a data fault is found or when at least 8 hours of the day have an unusual price against the same hour of the previous 28 days. A single unusual hour is not an alert: it occurs on about one day in three (223 of 702 days in 2024 and 2025). The 8-hour rule alerts on 29 of 702 days (4 percent). Faults are: missing or duplicate hours, missing values, solar output above 500 MW at night, load outside 15 to 90 GW, price beyond 1000 EUR/MWh in absolute value.

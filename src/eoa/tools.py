@@ -111,7 +111,43 @@ def wind_price_slope(start: str, end: str, df: pd.DataFrame | None = None) -> di
             "correlation": round(r, 2)}
 
 
+KB = Path(__file__).resolve().parents[2] / "kb"
+
+
+@lru_cache(maxsize=1)
+def _kb_index():
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    docs = [(f.stem, f.read_text(encoding="utf-8")) for f in sorted(KB.glob("*.md"))]
+    vec = TfidfVectorizer(stop_words="english", ngram_range=(1, 2), sublinear_tf=True)
+    return docs, vec, vec.fit_transform([t for _, t in docs])
+
+
+def search_kb(query: str, df=None, k: int = 2, min_score: float = 0.12) -> dict:
+    """Passages from the operations knowledge base by TF-IDF cosine similarity. Nothing is generated."""
+    docs, vec, mat = _kb_index()
+    sims = (mat @ vec.transform([query]).T).toarray().ravel()
+    order = np.argsort(-sims)[:k]
+    hits = [{"source": docs[i][0], "score": round(float(sims[i]), 2), "text": docs[i][1].strip()}
+            for i in order if sims[i] >= min_score]
+    return {"query": query, "hits": hits, "found": bool(hits)}
+
+
+def draft_notice(day: str, df: pd.DataFrame | None = None) -> dict:
+    """Draft customer notice for a day, built only from tool results; needs_approval is always true."""
+    s, a = daily_summary(day, df), price_anomalies(day, df)
+    if "error" in s:
+        return {"day": day, "error": "no data"}
+    text = (f"On {day} the German day-ahead price ranged from {s['price_min']} to {s['price_max']} EUR/MWh "
+            f"(mean {s['price_mean']}). {a['n_anomalies']} hours were unusual compared with the previous 28 days. "
+            "These are market prices; this message makes no statement about your tariff.")
+    return {"day": day, "n_anomalies": a["n_anomalies"], "text": text, "needs_approval": True}
+
+
 REGISTRY = {
+    "search_kb": {"fn": search_kb, "args": {"query": "text"},
+                  "doc": "Passages from the operations knowledge base (definitions, alert rules, fault handling)."},
+    "draft_notice": {"fn": draft_notice, "args": {"day": "YYYY-MM-DD"},
+                     "doc": "Draft customer notice for a day; always needs human approval."},
     "data_quality": {"fn": data_quality, "args": {"day": "YYYY-MM-DD"},
                      "doc": "Completeness and plausibility checks for one day."},
     "daily_summary": {"fn": daily_summary, "args": {"day": "YYYY-MM-DD"},

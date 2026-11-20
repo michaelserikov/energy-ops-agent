@@ -31,6 +31,11 @@ class RulePlanner:
     def plan(self, question: str) -> list[tuple[str, dict]]:
         dates = DATE.findall(question)
         q = question.lower()
+        if dates and any(w in q for w in ("notice", "customer message")):
+            return [("draft_notice", {"day": dates[0]})]
+        kb_words = ("what is", "what are", "why", "how do", "when does", "runbook", "rule", "explain", "what do i do")
+        if any(w in q for w in kb_words) and not any(w in q for w in ("summary", "report", "how was")):
+            return [("search_kb", {"query": question})]
         if not dates:
             return []
         calls: list[tuple[str, dict]] = []
@@ -95,7 +100,7 @@ def _flat(obj) -> list[str]:
     elif isinstance(obj, (int, float)):
         out += [f"{obj:g}", str(obj), f"{obj:.1f}", f"{obj:.2f}", f"{obj:.0f}"]
     elif isinstance(obj, str):
-        out += re.findall(r"\d+", obj)
+        out += re.findall(r"-?\d+(?:\.\d+)?", obj) + re.findall(r"\d+", obj)
     return out
 
 
@@ -143,6 +148,13 @@ def render(calls: list) -> str:
             else:
                 items = "; ".join(f"hour {a['hour']} price {a['price']} (typical {a['typical']})" for a in res["anomalies"])
                 lines.append(f"{res['day']}: {res['n_anomalies']} unusual hours: {items}.")
+        elif name == "search_kb":
+            if not res["hits"]:
+                lines.append("The knowledge base has no passage on this; ask the process team.")
+            for h in res["hits"]:
+                lines.append(f"[{h['source']}] {h['text']}")
+        elif name == "draft_notice":
+            lines.append(("DRAFT, needs approval: " + res["text"]) if "text" in res else f"{name}: {res}")
         elif name == "compare_days":
             lines.append(f"Mean price {res['a']['day']} against {res['b']['day']}: {res['price_mean_diff']} EUR/MWh; "
                          f"mean wind difference {res['wind_mean_diff_mw']:.0f} MW.")
@@ -165,9 +177,13 @@ class Agent:
         spec = T.REGISTRY[name]
         if set(args) != set(spec["args"]):
             return {"error": f"bad arguments for {name}"}
-        for v in args.values():
-            if not isinstance(v, str) or not DATE.fullmatch(v):
+        for k, v in args.items():
+            if not isinstance(v, str):
+                return {"error": f"{k} must be text"}
+            if spec["args"][k] == "YYYY-MM-DD" and not DATE.fullmatch(v):
                 return {"error": "dates must be YYYY-MM-DD"}
+            if spec["args"][k] == "text" and len(v) > 300:
+                return {"error": "query too long"}
         try:
             return spec["fn"](**args, df=self.df)
         except Exception as e:  # tools never crash the loop

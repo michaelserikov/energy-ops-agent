@@ -1,0 +1,2 @@
+# What to do with a data fault
+Missing hours or values: check whether the source (SMARD) has published the day; repeat the request after a few hours; do not fill gaps in a report without saying so. Solar at night or implausible load: treat as a source error, exclude the day from any analysis and tell the data owner. Duplicate timestamps: keep the later record and log the change. The agent never edits data and never sends anything to customers.

@@ -1,4 +1,4 @@
-# Energy operations agent: checked answers and a daily report on German power data
+# Energy operations agent: checked answers, runbook retrieval and a daily report on German power data
 
 A small agent that answers questions about German hourly power data (day-ahead price, wind, solar, load; SMARD, 2023-2025) by calling tools, and a daily report that a workflow engine can call every morning. The point is the control around the language model: tools with fixed arguments, a step limit, an audit trail of every call, and a check that every number in an answer occurs in a tool result. An answer with a number no tool returned is withheld.
 
@@ -7,6 +7,8 @@ A small agent that answers questions about German hourly power data (day-ahead p
 | Part | File | Notes |
 |---|---|---|
 | Tools | `src/eoa/tools.py` | data quality (missing or duplicate hours, missing values, solar at night, implausible values), daily summary, unusual hourly prices against the same hour in the previous 28 days (robust z-score), day comparison, price slope per GW of residual load |
+| Knowledge base | `kb/*.md`, `tools.search_kb` | six operations runbooks (definitions, alert rules, fault handling, notice rules); TF-IDF retrieval returns the passage with its source and nothing is generated; a question outside the base is answered with a referral |
+| Customer notice | `tools.draft_notice` | template text from tool results, always marked as needing approval; the agent sends nothing |
 | Agent loop | `src/eoa/agent.py` | `RulePlanner` (deterministic, no key) and `LLMPlanner` (any chat model with function calling, passed in as a callable). Arguments are validated (dates only), unknown tools are refused, tool errors do not stop the loop |
 | Grounding check | `agent.check_grounded` | numbers in the answer must match a tool result or its rounding; otherwise the answer is replaced by a refusal that lists the numbers |
 | HTTP | `src/eoa/api.py` | `GET /report?day=`, `POST /ask`, `GET /health` (FastAPI) |
@@ -31,7 +33,7 @@ A small agent that answers questions about German hourly power data (day-ahead p
 
 ```bash
 pip install -e ".[test]"
-pytest                                  # 7 tests
+pytest                                  # 11 tests
 python scripts/backtest_flags.py
 uvicorn eoa.api:app --port 8000         # then GET /report?day=2024-12-12
 ```
