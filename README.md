@@ -35,3 +35,7 @@ pytest                                  # 7 tests
 python scripts/backtest_flags.py
 uvicorn eoa.api:app --port 8000         # then GET /report?day=2024-12-12
 ```
+
+## Data licence
+
+SMARD.de, Bundesnetzagentur (CC BY 4.0): hourly day-ahead price, generation and load for Germany, 2023-2025, stored in `data/`.
