@@ -83,3 +83,33 @@ def test_report_and_api():
     assert c.get("/report", params={"day": "bad"}).status_code == 422
     assert c.get("/report", params={"day": "2030-01-01"}).status_code == 404
     assert c.post("/ask", json={"question": "check data quality 2024-06-01"}).json()["grounded"]
+
+
+def test_llm_planner_with_scripted_model(df):
+    """LLMPlanner loop with a scripted chat function: one tool call, then an answer."""
+    from eoa.agent import LLMPlanner
+    seen = []
+
+    def chat(msgs, tools):
+        seen.append(len(msgs))
+        if not any(m["role"] == "tool" for m in msgs):
+            return {"text": "", "tool_calls": [{"id": "c0", "name": "daily_summary", "args": {"day": "2024-06-01"}}]}
+        return {"text": "Mean price on 2024-06-01 was 12345.67 EUR/MWh.", "tool_calls": []}   # invented number
+
+    t = Agent(planner=LLMPlanner(chat), df=df).ask("How was 2024-06-01?")
+    assert [c[0] for c in t.calls] == ["daily_summary"]
+    assert not t.grounded and "12345.67" in t.answer and t.answer.startswith("Withheld")
+
+
+def test_gemini_translation_roundtrip():
+    from eoa.providers import from_gemini, to_gemini
+    msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": "q"},
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "c0", "name": "daily_summary", "args": {"day": "2024-06-01"}}]},
+            {"role": "tool", "tool_call_id": "c0", "content": "{\"price_mean\": 1.5}"}]
+    tools = [{"name": "daily_summary", "description": "d", "parameters": {"type": "object", "properties": {}}}]
+    b = to_gemini(msgs, tools)
+    assert b["systemInstruction"]["parts"][0]["text"] == "s"
+    assert b["contents"][1]["parts"][0]["functionCall"]["name"] == "daily_summary"
+    assert b["contents"][2]["parts"][0]["functionResponse"]["name"] == "daily_summary"
+    r = from_gemini({"candidates": [{"content": {"parts": [{"functionCall": {"name": "x", "args": {"a": "1"}}}]}}]})
+    assert r["tool_calls"][0]["name"] == "x" and r["text"] == ""

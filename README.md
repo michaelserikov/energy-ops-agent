@@ -9,7 +9,7 @@ A small agent that answers questions about German hourly power data (day-ahead p
 | Tools | `src/eoa/tools.py` | data quality (missing or duplicate hours, missing values, solar at night, implausible values), daily summary, unusual hourly prices against the same hour in the previous 28 days (robust z-score), day comparison, price slope per GW of residual load |
 | Knowledge base | `kb/*.md`, `tools.search_kb` | six operations runbooks (definitions, alert rules, fault handling, notice rules); TF-IDF retrieval returns the passage with its source and nothing is generated; a question outside the base is answered with a referral |
 | Customer notice | `tools.draft_notice` | template text from tool results, always marked as needing approval; the agent sends nothing |
-| Agent loop | `src/eoa/agent.py` | `RulePlanner` (deterministic, no key) and `LLMPlanner` (any chat model with function calling, passed in as a callable). Arguments are validated (dates only), unknown tools are refused, tool errors do not stop the loop |
+| Agent loop | `src/eoa/agent.py` | `RulePlanner` (deterministic, no key) and `LLMPlanner` (any chat model with function calling, passed in as a callable; `providers.py` has an adapter for the Gemini REST API). Arguments are validated (dates only), unknown tools are refused, tool errors do not stop the loop |
 | Grounding check | `agent.check_grounded` | numbers in the answer must match a tool result or its rounding; otherwise the answer is replaced by a refusal that lists the numbers |
 | HTTP | `src/eoa/api.py` | `GET /report?day=`, `POST /ask`, `GET /health` (FastAPI) |
 | Workflow | `n8n/daily_energy_report.json` | 07:00 schedule, yesterday's date, call `/report` with three retries, branch on `alert`, mail operations or log |
@@ -33,7 +33,7 @@ A small agent that answers questions about German hourly power data (day-ahead p
 
 ```bash
 pip install -e ".[test]"
-pytest                                  # 11 tests
+pytest                                  # 13 tests
 python scripts/backtest_flags.py
 uvicorn eoa.api:app --port 8000         # then GET /report?day=2024-12-12
 ```
