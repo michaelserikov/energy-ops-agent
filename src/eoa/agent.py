@@ -70,8 +70,13 @@ class LLMPlanner:  # pragma: no cover - needs a model endpoint
                                 "required": list(s["args"])}} for n, s in T.REGISTRY.items()]
 
     def run(self, question: str, trace: Trace, execute) -> str:
+        d = T.load()
+        span = f"{d.index.min().tz_convert('UTC'):%Y-%m-%d} to {d.index.max().tz_convert('UTC'):%Y-%m-%d}"
         msgs = [{"role": "system", "content": "You answer questions about German power data using the tools. "
-                 "Quote numbers only as the tools return them. If the data cannot answer, say so."},
+                 "Quote numbers only as the tools return them. If the data cannot answer, say so. "
+                 f"The data covers {span}. You do not know today's date and there is no forecast tool: "
+                 "for questions about the future or about days outside the data, say that the tools cannot answer, "
+                 "and never present a past day as a forecast."},
                 {"role": "user", "content": question}]
         for _ in range(MAX_STEPS):
             r = self.chat(msgs, self.tool_specs())
@@ -86,6 +91,8 @@ class LLMPlanner:  # pragma: no cover - needs a model endpoint
 
 
 def _numbers(text: str) -> list[str]:
+    text = re.sub(r"(?m)^\s*(?:[-*]\s*)?\d{1,2}[.)]\s", " ", text)   # list numbering is not a figure
+    text = re.sub(r"(?<=\d)[,  ](?=\d{3}(?!\d))", "", text)   # thousands separators: 1,453 and 59 496
     return re.findall(r"-?\d+(?:\.\d+)?", DATE.sub(" ", text))
 
 

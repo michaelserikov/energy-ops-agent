@@ -123,3 +123,17 @@ def test_report_of_a_quiet_day_is_not_withheld(df):
 def test_every_day_of_a_month_is_grounded(df):
     for d in pd.date_range("2024-03-01", "2024-03-31"):
         assert daily_report(d.strftime("%Y-%m-%d"), df)["grounded"], d
+
+
+def test_thousands_separators_do_not_split_numbers():
+    calls = [("x", {}, {"wind_mean_mw": 1453.0, "residual": 59496.0})]
+    assert check_grounded("Wind was 1,453 MW and residual load 59,496 MW.", calls) == []
+    assert check_grounded("Wind was 1,454 MW.", calls) == ["1454"]
+
+
+def test_list_numbering_is_not_a_figure():
+    calls = [("x", {}, {"v": 8})]
+    text = "\n".join(["Steps:", "1. Check the source.", "2. Repeat later.", "3. Tell the owner. Value 8."])
+    assert check_grounded(text, calls) == []
+    text = "\n".join(["Steps:", "1. Check the source. Value 9."])
+    assert check_grounded(text, calls) == ["9"]

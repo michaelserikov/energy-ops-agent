@@ -36,12 +36,17 @@ def to_gemini(messages: list, tools: list) -> dict:
             parts = [{"text": m["content"]}] if m.get("content") else []
             for c in m.get("tool_calls", []):
                 id_to_name[c["id"]] = c["name"]
-                parts.append({"functionCall": {"name": c["name"], "args": c["args"]}})
+                # the model's own part is replayed unchanged (it can carry a thought signature)
+                parts.append(c.get("raw") or {"functionCall": {"name": c["name"], "args": c["args"]}})
             contents.append({"role": "model", "parts": parts})
         elif m["role"] == "tool":
             import json
-            contents.append({"role": "user", "parts": [{"functionResponse": {
-                "name": id_to_name.get(m["tool_call_id"], "tool"), "response": {"result": json.loads(m["content"])}}}]})
+            part = {"functionResponse": {"name": id_to_name.get(m["tool_call_id"], "tool"),
+                                         "response": {"result": json.loads(m["content"])}}}
+            if contents and contents[-1]["role"] == "user" and "functionResponse" in contents[-1]["parts"][0]:
+                contents[-1]["parts"].append(part)      # responses to one model turn go in one user turn
+            else:
+                contents.append({"role": "user", "parts": [part]})
     body = {"contents": contents,
             "tools": [{"functionDeclarations": [{"name": t["name"], "description": t["description"],
                                                  "parameters": t["parameters"]} for t in tools]}]}
@@ -53,16 +58,31 @@ def to_gemini(messages: list, tools: list) -> dict:
 def from_gemini(resp: dict) -> dict:
     parts = (resp.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
     text = "".join(p.get("text", "") for p in parts)
-    calls = [{"id": f"call{i}", "name": p["functionCall"]["name"], "args": dict(p["functionCall"].get("args", {}))}
-             for i, p in enumerate(x for x in parts if "functionCall" in x)]
+    calls = [{"id": f"call{i}", "name": p["functionCall"]["name"], "args": dict(p["functionCall"].get("args", {})),
+              "raw": p} for i, p in enumerate(x for x in parts if "functionCall" in x)]
     return {"text": text, "tool_calls": calls}
 
 
-def gemini_chat(model: str = "gemini-2.5-flash", post=requests.post):
+def gemini_chat(model: str = "gemini-3-flash-preview", post=requests.post, retries: int = 5, pause: float = 8.0):
+    """Chat callable for LLMPlanner. Retries on overload (429, 500, 503) and timeouts with growing pauses."""
+    import time
+
     def chat(messages, tools):
-        r = post(GEMINI_URL.format(model=model), json=to_gemini(messages, tools),
-                 headers={"x-goog-api-key": _key()}, timeout=60)
-        if r.status_code != 200:
-            raise RuntimeError(f"model endpoint returned {r.status_code}")
-        return from_gemini(r.json())
+        last = "no attempt"
+        for attempt in range(retries):
+            try:
+                r = post(GEMINI_URL.format(model=model), json=to_gemini(messages, tools),
+                         headers={"x-goog-api-key": _key()}, timeout=90)
+            except requests.exceptions.RequestException as e:
+                last = type(e).__name__
+                time.sleep(pause * (attempt + 1))
+                continue
+            if r.status_code == 200:
+                return from_gemini(r.json())
+            last = f"status {r.status_code}"
+            if r.status_code in (429, 500, 503):
+                time.sleep(pause * (attempt + 1))
+                continue
+            break
+        raise RuntimeError(f"model endpoint failed: {last}")
     return chat

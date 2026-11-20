@@ -23,9 +23,25 @@ A small agent that answers questions about German hourly power data (day-ahead p
 - **A bug the tests caught.** The first version decided "no data for this day" by searching the report text for the words "no data", which the sentence "no data problems found" also contains; every day returned 404. The check now uses the tool result.
 - **Price slope.** January to March 2025: 3.1 EUR/MWh per GW of residual load (correlation 0.88 over 2,136 hours), a descriptive number.
 
+## Run with a hosted model (20 November 2026)
+
+`providers.gemini_chat` connects the same tools and the same grounding check to a hosted model with function calling (Gemini REST API, free tier). 12 questions, one run each (`scripts/llm_eval.py`, results in `results/llm_eval_*.json`): six on data (summary, price, unusual hours, comparison, quality, customer notice), three on the knowledge base, three traps (tomorrow's price, a day outside the data, "guess from memory").
+
+| Model | Data questions with the reference figure | Endpoint errors | Withheld by the guard | Traps answered with a number |
+|---|---|---|---|---|
+| gemini-3.1-flash-lite-preview, first run | 6 of 6 | 0 | 1 (false alarm) | 1 (the model made up a date for "tomorrow") |
+| same, after two fixes | 6 of 6 | 0 | 0 | 0 |
+| gemini-3-flash-preview | 6 of 6 | 6 of 12 (quota) | 0 | not run |
+
+What the run showed:
+- **Grounded numbers are not correct claims.** On "what will the price be tomorrow?" the first run called the summary tool for a day it had chosen itself (2025-01-25) and presented a past day as tomorrow's price. Every number was real and passed the check. The fix is in the instruction (the model is told the data period, that there is no forecast tool and that it does not know today's date); the guard cannot catch this kind of error.
+- **Two false alarms of the guard were mine.** Thousands separators ("1,453 MW") and list numbering ("3. ...") were read as invented numbers; both are fixed and tested.
+- Model names change quickly: `gemini-2.5-flash` was no longer available to this account, `gemini-3.8-flash` answered 503 on every attempt, and `gemini-3-flash-preview` ran out of free quota after six questions. The adapter retries on 429, 500 and 503 and on timeouts.
+- Limits: 12 questions, one run each, answers of a model vary between runs.
+
 ## Not done
 
-- `LLMPlanner` is written against a generic function-calling interface but has not been run with a real model: no model endpoint was available. Only the deterministic planner is tested.
+- `LLMPlanner` has been run against a hosted model (below), but only on 12 questions, one run each, and the instruction text was changed after the first run, so the second result is not an independent test. No comparison of models beyond the six data questions of a second model that hit its quota.
 - n8n 2.35.7 (installed with npm in WSL) imported the workflow and ran it through the webhook trigger on two days: 2024-06-01 ended in the branch without alert, 2024-12-12 stored a message to operations (`results/n8n_run.md`). The schedule trigger was configured but not observed to fire. The outbox is a local file, not a mail server.
 - Data is a stored SMARD export, not a live feed; tools never write or send anything, and no personal or customer data is involved.
 - Research and demonstration project, not an operational monitoring system.
@@ -34,7 +50,7 @@ A small agent that answers questions about German hourly power data (day-ahead p
 
 ```bash
 pip install -e ".[test]"
-pytest                                  # 13 tests
+pytest                                  # 17 tests
 python scripts/backtest_flags.py
 uvicorn eoa.api:app --port 8000         # then GET /report?day=2024-12-12
 ```
